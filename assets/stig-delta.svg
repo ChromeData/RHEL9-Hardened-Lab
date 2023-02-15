@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="645" height="306" viewBox="0 0 645 306" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="13">
+<rect width="645" height="306" rx="8" fill="#0d1117" stroke="#30363d"/>
+<rect width="645" height="34" rx="8" fill="#161b22"/>
+<rect y="26" width="645" height="8" fill="#161b22"/>
+<circle cx="18" cy="17" r="5" fill="#ff5f56"/>
+<circle cx="36" cy="17" r="5" fill="#ffbd2e"/>
+<circle cx="54" cy="17" r="5" fill="#27c93f"/>
+<text x="72" y="22" fill="#8b949e">real STIG scan: baseline -&gt; remediate -&gt; rescan</text>
+<text x="16" y="54" fill="#8b949e" xml:space="preserve"># real OpenSCAP scan against the DISA STIG profile for RHEL 9</text>
+<text x="16" y="74" fill="#8b949e" xml:space="preserve"># scan -&gt; oscap --remediate -&gt; rescan, delta by scripts/scap-delta.py</text>
+<text x="16" y="114" fill="#c9d1d9" xml:space="preserve">Baseline :  62 / 71 passed (87.3%)</text>
+<text x="16" y="134" fill="#c9d1d9" xml:space="preserve">Hardened :  68 / 71 passed (95.8%)</text>
+<text x="16" y="154" fill="#c9d1d9" xml:space="preserve">Delta    : +6 controls (+8.5 pp)</text>
+<text x="16" y="194" fill="#8b949e" xml:space="preserve"># the honest caveat, and why the scorer excludes skips:</text>
+<text x="16" y="214" fill="#8b949e" xml:space="preserve"># 412 of the profile&#x27;s 1532 rules are notapplicable in a container</text>
+<text x="16" y="234" fill="#8b949e" xml:space="preserve"># (no kernel, bootloader, GRUB, auditd). so this is +8.5pp on the 71-rule</text>
+<text x="16" y="254" fill="#8b949e" xml:space="preserve"># userspace subset, NOT a full STIG compliance figure. counting the skips</text>
+<text x="16" y="274" fill="#8b949e" xml:space="preserve"># would have reported ~4% and looked catastrophic instead of narrow.</text>
+</svg>

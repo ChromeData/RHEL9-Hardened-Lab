@@ -1,0 +1,42 @@
+---
+# Orchestration only. The actual hardening logic lives in the upstream
+# devsec.hardening collection; the SCAP content comes from the scap-security-guide
+# package (ComplianceAsCode). This playbook wires them into a measurable workflow.
+
+- name: RHEL 9 hardening lab
+  hosts: all
+  become: true
+
+  vars:
+    # DISA STIG profile shipped in the SCAP Security Guide for RHEL 9.
+    # List available profiles on the box with:
+    #   oscap info /usr/share/xml/scap/ssg/content/ssg-rl9-ds.xml
+    scap_datastream: /usr/share/xml/scap/ssg/content/ssg-almalinux9-ds.xml
+    scap_profile: xccdf_org.ssgproject.content_profile_stig
+    reports_dir: /vagrant/reports
+
+  tasks:
+    - name: Install OpenSCAP tooling and SCAP content
+      ansible.builtin.package:
+        name:
+          - openscap-scanner
+          - scap-security-guide
+        state: present
+
+    - name: Ensure reports directory exists
+      ansible.builtin.file:
+        path: "{{ reports_dir }}"
+        state: directory
+        mode: "0755"
+
+    # Baseline scan is invoked explicitly via `make scan-before` rather than here,
+    # so you capture the UNHARDENED state before this playbook's hardening roles
+    # run. See the Makefile, ordering is deliberate.
+
+  roles:
+    # Applied by `make harden`, tag-gated so `make up` can provision without
+    # hardening on the first pass.
+    - role: devsec.hardening.os_hardening
+      tags: [harden, never]
+    - role: devsec.hardening.ssh_hardening
+      tags: [harden, never]
