@@ -1,116 +1,88 @@
 # Lab 03 — Self-Building Hardened RHEL 9 Lab
 
-**A Vagrant + Ansible environment that provisions a RHEL 9 host, measures its
-CIS/STIG compliance, applies remediation as code, and measures again — so the
-hardening is proven by a before/after score, not asserted.**
+[![tests](https://github.com/ChromeData/RHEL9-Hardened-Lab/actions/workflows/tests.yml/badge.svg)](https://github.com/ChromeData/RHEL9-Hardened-Lab/actions/workflows/tests.yml)
+
+**A VM that hardens itself and proves it worked. Boot a RHEL 9 box, scan it
+against the DISA STIG, apply fixes as code, scan again — the result is a
+before/after number, not a claim.**
 
 | | |
 |---|---|
 | **Domains** | Linux (RHEL 9 · RHCSA/RHCE-adjacent) · security |
-| **Built on** | [ComplianceAsCode/content](https://github.com/ComplianceAsCode/content) (BSD-3) · [dev-sec/ansible-collection-hardening](https://github.com/dev-sec/ansible-collection-hardening) (Apache-2.0) · [OpenSCAP](https://github.com/OpenSCAP/openscap) |
-| **Runtime** | ~3 hours · $0 (runs locally in a VM) |
-| **Status** | 🟡 In progress |
+| **Built on** | [ComplianceAsCode/content](https://github.com/ComplianceAsCode/content) (BSD-3) · [dev-sec/ansible-collection-hardening](https://github.com/dev-sec/ansible-collection-hardening) (Apache-2.0) · OpenSCAP |
+| **Cost** | $0 (local VM) · **Runtime** ~3 hours |
+| **Status** | 🟡 Built, validated, not yet run |
 
 ---
 
-## Why this lab exists
+## The point
 
-Almost every RHCSA repo on GitHub is a folder of notes. Notes do not prove you can
-harden a box. A lab that stands up a real RHEL 9 host, scans it against the DISA
-STIG with OpenSCAP, shows a failing baseline score, applies remediation with
-Ansible, and re-scans to show the improved score — that proves it, and it produces
-an artifact (the score delta) you can point at.
+Almost every RHCSA repo on GitHub is a folder of notes. Notes don't prove you can
+harden a box. This does the loop that proves it:
 
-This also sits one level above cert prep: it's the compliance-as-code workflow real
-platform teams run, using the actual upstream content Red Hat's own STIG roles are
-generated from.
+1. **Stand up** an unhardened RHEL 9 host (Vagrant).
+2. **Scan** it against the STIG with OpenSCAP → a failing baseline score.
+3. **Harden** with Ansible (dev-sec roles).
+4. **Scan again** → the improved score.
+5. **Diff** the two → the number that is the whole point.
 
-## What I built
+The artifact is the delta. "I hardened Linux" is a sentence anyone can write.
+"I moved it from 41% to 89% STIG-compliant and here are the four controls that
+regressed and why" is evidence.
 
-- A **Vagrantfile** that boots a RHEL 9 (or Rocky/Alma 9) box reproducibly.
-- An **Ansible playbook** that: installs OpenSCAP + the SCAP Security Guide, runs a
-  baseline scan, applies the dev-sec hardening collection, and re-scans.
-- A **scan wrapper** that captures both HTML and machine-readable results and
-  computes the pass-rate delta.
-- A **reports/** convention for committing the before/after so the improvement is
-  visible in the repo history.
+## The measurement is tested
 
-## What I did not build
+[`scripts/scap-delta.py`](./scripts/scap-delta.py) parses two OpenSCAP result
+files and computes the delta. That's where the headline number comes from, so it
+has **8 offline unit tests** on synthetic XCCDF — no VM needed:
 
-OpenSCAP, the SCAP Security Guide content (ComplianceAsCode), and the dev-sec
-hardening roles are all upstream. My work is the environment, the orchestration,
-the measurement harness, and the analysis of which controls remediated cleanly and
-which needed manual intervention.
+- skips (`notapplicable`) don't drag the percentage down
+- a remediated rule reports as `fixed`, not `pass` — counted correctly
+- both the 1.1 and 1.2 XCCDF namespaces parse
+- **regressions are surfaced, not buried** — hardening that breaks a
+  previously-passing control is the thing you most need to see
+
+```bash
+python -m pytest tests/ -v
+```
+
+CI runs the tests plus an Ansible syntax check on every push.
+
+## Why regressions matter
+
+Hardening isn't monotonic. Turning on a STIG control can break a different one —
+tighten SSH ciphers and something that expected the old set starts failing. A
+delta that only counts wins is lying to you. `scap-delta.py` prints every
+`pass → fail` flip with a `!`, because those are the ones you write about.
+
+## What I didn't build
+
+The hardening roles are dev-sec's; the SCAP content is ComplianceAsCode's. The
+measurable before/after workflow, the delta scorer, the tests, and the
+orchestration are mine.
 
 ---
 
 ## Running it
 
-### Prerequisites
-
 ```bash
-vagrant   >= 2.4
-virtualbox or libvirt
-ansible   >= 2.16
+make up            # provision the RHEL 9 VM
+make scan-before   # baseline scan (unhardened) -> reports/before.xml
+make harden        # apply the dev-sec roles
+make scan-after    # second scan -> reports/after.xml
+make delta         # the number
+make destroy
 ```
 
-A RHEL 9 box needs a Red Hat Developer subscription; the playbook also works
-against `generic/rocky9` or `almalinux/9` with no subscription, which is the
-recommended default for a public lab.
-
-### Setup and run
-
-```bash
-make up          # vagrant up + install collections
-make scan-before # OpenSCAP baseline scan -> reports/before.html + .xml
-make harden      # apply dev-sec hardening + selected STIG remediations
-make scan-after  # re-scan -> reports/after.html + .xml
-make delta       # compute and print the pass-rate improvement
-```
-
-### Teardown
-
-```bash
-make destroy     # vagrant destroy -f
-```
-
----
-
-## The measurement
-
-`make delta` parses both ARF/XML results and prints something like:
-
-```
-STIG baseline : 143 / 312 passed (45.8%)
-After hardening: 271 / 312 passed (86.9%)
-Delta         : +128 controls (+41.1 pp)
-```
-
-Commit `reports/before.html` and `reports/after.html`. That delta, visible in the
-repo, is the whole point — it is evidence in a form a reviewer can open.
+Needs Vagrant + a libvirt/VirtualBox provider, and Python 3 on the host for the
+delta.
 
 ## Findings
 
-Worth documenting:
+`reports/` and the printed delta are the output. [LAB-NOTES.md](./LAB-NOTES.md) is
+the log.
 
-| Control area | Baseline | After | Notes |
-|--------------|----------|-------|-------|
-| SSH hardening | | | |
-| Password / PAM policy | | | |
-| Audit (auditd) rules | | | |
-| Filesystem mount options | | | |
-| SELinux enforcement | | | |
+## License
 
-The analysis interviewers care about:
-- Which controls did **not** remediate automatically, and why?
-- Did any remediation break functionality (e.g. SSH lockout, sudo)? How did you
-  recover? (This is where LAB-NOTES earns its keep.)
-- Which STIG findings are false positives against a minimal Vagrant box?
-
-## What broke
-
-See [LAB-NOTES.md](./LAB-NOTES.md).
-
-## What I would do differently
-
-_End._
+Lab code: MIT ([LICENSE](./LICENSE)). Upstream content keeps BSD-3 / Apache-2.0,
+credited above.
