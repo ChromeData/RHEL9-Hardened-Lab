@@ -1,0 +1,22 @@
+Test run: 2026-08-12 00:37:53
+Host: Windows 11, Python Python 3.14.0
+Command: python -m pytest tests/ -v
+============================================================
+============================= test session starts =============================
+platform win32 -- Python 3.14.0, pytest-9.0.2, pluggy-1.6.0 -- C:\Python314\python.exe
+cachedir: .pytest_cache
+rootdir: C:\Users\SnatchedYourChain\Downloads\pam-cloud-labs-extracted\pam-cloud-labs\03-rhel9-hardened-lab
+plugins: anyio-4.12.1, langsmith-0.7.10
+collecting ... collected 8 items
+
+tests/test_scap_delta.py::TestParse::test_reads_rule_results PASSED      [ 12%]
+tests/test_scap_delta.py::TestParse::test_falls_back_to_1_1_namespace PASSED [ 25%]
+tests/test_scap_delta.py::TestScoring::test_skips_do_not_count_toward_the_score PASSED [ 37%]
+tests/test_scap_delta.py::TestScoring::test_fixed_is_treated_as_pass PASSED [ 50%]
+tests/test_scap_delta.py::TestDelta::test_counts_controls_that_flipped_to_pass PASSED [ 62%]
+tests/test_scap_delta.py::TestDelta::test_flags_regressions PASSED       [ 75%]
+tests/test_scap_delta.py::TestDelta::test_percentage_improvement PASSED  [ 87%]
+tests/test_scap_delta.py::TestDelta::test_clean_run_has_no_regressions PASSED [100%]
+
+============================== 8 passed in 0.02s ==============================
+

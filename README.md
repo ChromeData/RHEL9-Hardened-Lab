@@ -9,7 +9,7 @@
 | **Domains** | Linux (RHEL 9, RHCSA/RHCE adjacent), security |
 | **Built on** | [ComplianceAsCode/content](https://github.com/ComplianceAsCode/content), [dev-sec/ansible-collection-hardening](https://github.com/dev-sec/ansible-collection-hardening), OpenSCAP |
 | **Cost** | $0 (local VM). **Runtime** ~3 hours |
-| **Status** | Built, validated, not yet run |
+| **Status** | Built and verified. Delta scorer tested (8 passing, output in findings/). VM run pending |
 
 ## Situation
 

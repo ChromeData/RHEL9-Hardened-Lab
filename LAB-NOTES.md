@@ -65,4 +65,35 @@ anything but a pass understates the result.
 
 ## Log
 
-_(first entry goes here on the first real run)_
+### 2026-08-12 — testing the scorer before trusting the number
+
+The delta script is the whole deliverable: the before/after percentage is what I'd
+quote in an interview. So I wrote tests against synthetic XCCDF before running a
+single scan, and two of them changed the implementation:
+
+**Skips must not count.** A box with 300 `notapplicable` rules would score fake-high
+if they land in the denominator. Only pass + fail are scored.
+
+**`fixed` is a pass.** OpenSCAP reports a rule it remediated in-run as `fixed`, not
+`pass`. Treating that literally would undercount every remediation the scan itself
+performed — which is most of them.
+
+Also split `compute_delta()` out as a pure function so the tests exercise the exact
+aggregation the report prints, not a parallel reimplementation of it.
+
+Final run: **8 passed** (`findings/test-run.txt`).
+
+---
+
+### 2026-08-12 — decided regressions get their own output line
+
+Hardening isn't monotonic. Tightening SSH ciphers can break a control that expected
+the old set. A delta that only counts wins reads great and hides the damage.
+
+`scap-delta.py` prints every `pass -> fail` flip with a `!` marker and a test asserts
+it. If the hardening breaks four controls, I want that on screen, because those four
+are the interesting half of the write-up.
+
+**Still to confirm on the VM:** whether the STIG profile plus the dev-sec ssh role
+locks SSH down hard enough to drop the Vagrant connection. If it does, the second scan
+can't run and the whole loop stalls.
