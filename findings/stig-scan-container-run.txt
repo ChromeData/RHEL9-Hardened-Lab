@@ -1,0 +1,49 @@
+STIG scan, real run
+Date: 2026-08-12 02:04:52
+Target: rockylinux/rockylinux:9 container (not a VM, see CAVEAT)
+Content: scap-security-guide, ssg-rl9-ds.xml
+Profile: xccdf_org.ssgproject.content_profile_stig (DISA STIG for RHEL 9)
+Scanner: OpenSCAP command line tool (oscap) 1.3.14
+======================================================================
+
+HEADLINE
+  Baseline :  62 / 71 passed (87.3%)
+  Hardened :  68 / 71 passed (95.8%)
+  Delta    : +6 controls (+8.5 pp)
+  Fixed    : 6
+  Regressed: 0
+
+FULL RULE ACCOUNTING (1532 rules in the profile, both runs)
+                    before   after
+  pass                  62      68
+  fail                   9       3
+  notapplicable        412     412
+  notselected         1048    1048
+  notchecked             1       1
+
+CAVEAT, and it is the important part
+  Only 71 rules are actually scored here (pass + fail). 412 come back
+  notapplicable because this ran in a container, not a VM. Everything
+  touching the kernel, the bootloader, GRUB, partitioning, systemd
+  targets, auditd and physical console access has nothing to evaluate
+  inside a container namespace.
+
+  So 87.3% -> 95.8% is a real measurement of a real scan, but it is a
+  measurement of the 71-rule userspace subset, NOT of a full STIG
+  baseline. Quoting it as 'my RHEL 9 box went from 87% to 96% STIG
+  compliant' would be misleading. On a real VM the denominator is
+  several hundred rules and the starting percentage is far lower,
+  because that is where the kernel and boot rules live and where most
+  of the genuine hardening work is.
+
+  This run proves the pipeline works end to end: scan, remediate,
+  rescan, diff, with the delta computed by scripts/scap-delta.py.
+  The headline number for the README still needs the VM run.
+
+NOTES
+  - Datastream is ssg-rl9-ds.xml on Rocky. ansible/site.yml assumed
+    ssg-almalinux9-ds.xml, which does not exist here. Confirmed the
+    trap documented in LAB-NOTES.md.
+  - 0 regressions. Container remediation is conservative because most
+    of the rules that could break a running system are notapplicable.
+    A VM run is where regressions would actually show up.

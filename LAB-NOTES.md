@@ -85,6 +85,67 @@ Final run: **8 passed** (`findings/test-run.txt`).
 
 ---
 
+### 2026-08-12, first real scan, in a container rather than a VM
+
+No hypervisor available on this machine, so I ran the loop against a
+`rockylinux/rockylinux:9` container instead of the Vagrant VM: install
+openscap-scanner and scap-security-guide, scan, `oscap --remediate`, rescan,
+then diff with `scripts/scap-delta.py`.
+
+**It works end to end.** The scorer parsed real OpenSCAP output on the first
+try:
+
+```
+Baseline :  62 / 71 passed (87.3%)
+Hardened :  68 / 71 passed (95.8%)
+Delta    : +6 controls (+8.5 pp)
+Fixed    : 6
+Regressed: 0
+```
+
+**And then the number turned out to be nearly meaningless, which is the
+finding.**
+
+Full accounting across the 1532 rules in the profile:
+
+```
+                    before   after
+  pass                  62      68
+  fail                   9       3
+  notapplicable        412     412
+  notselected         1048    1048
+  notchecked             1       1
+```
+
+Only **71 rules are actually scored**. 412 come back `notapplicable` because a
+container has no kernel of its own, no bootloader, no GRUB config, no
+partitioning, no auditd, no physical console. Every rule about those has
+nothing to evaluate.
+
+So 87.3% to 95.8% is a real measurement of a real scan of the userspace
+subset. It is *not* a STIG compliance figure, and quoting it as "my RHEL 9 box
+went from 87% to 96% STIG compliant" would be misleading. On a VM the
+denominator is several hundred rules and the baseline percentage is far lower,
+because the kernel and boot rules are where most of the genuine hardening work
+lives.
+
+This is exactly why the skip-handling test exists. If `notapplicable` counted
+toward the denominator, this run would have reported roughly 4% and looked
+catastrophic instead of narrow.
+
+**Also confirmed a trap I had only predicted:** the datastream on Rocky is
+`ssg-rl9-ds.xml`. `ansible/site.yml` assumed `ssg-almalinux9-ds.xml`, which
+does not exist on this image. Wrong path means zero rules scanned, which
+presents as a clean pass.
+
+**Zero regressions**, but that is not reassuring here. The rules capable of
+breaking a running system are mostly the notapplicable ones. Regressions are a
+VM-run phenomenon.
+
+Full output in `findings/stig-scan-container-run.txt`.
+
+---
+
 ### 2026-08-12, decided regressions get their own output line
 
 Hardening isn't monotonic. Tightening SSH ciphers can break a control that expected

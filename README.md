@@ -9,7 +9,7 @@
 | **Domains** | Linux (RHEL 9, RHCSA/RHCE adjacent), security |
 | **Built on** | [ComplianceAsCode/content](https://github.com/ComplianceAsCode/content), [dev-sec/ansible-collection-hardening](https://github.com/dev-sec/ansible-collection-hardening), OpenSCAP |
 | **Cost** | $0 (local VM). **Runtime** ~3 hours |
-| **Status** | Built and verified. Delta scorer tested (8 passing, output in findings/). VM run pending |
+| **Status** | Pipeline verified on a real scan. Container run gives 87.3% to 95.8% on the 71 rule userspace subset (output in findings/). VM run still needed for a full STIG number |
 
 ## Situation
 
@@ -28,6 +28,18 @@ The diff is the point. "I hardened Linux" is a sentence anyone can write. "I mov
 The scorer that produces the number ([scripts/scap-delta.py](./scripts/scap-delta.py)) has 8 offline tests on fake SCAP files, so the headline number is trustworthy before I ever boot a VM. It handles skips correctly, counts a remediated rule as a pass, reads both SCAP formats, and surfaces regressions.
 
 ## Result
+
+Ran the full loop for real against a Rocky Linux 9 container: scan, remediate, rescan, diff. The scorer parsed genuine OpenSCAP output first try.
+
+```
+Baseline :  62 / 71 passed (87.3%)
+Hardened :  68 / 71 passed (95.8%)
+Delta    : +6 controls (+8.5 pp)
+```
+
+**And the caveat is the interesting part.** Only 71 of the profile's 1532 rules are actually scored. 412 come back notapplicable because a container has no kernel, bootloader, GRUB or auditd of its own. So that delta is real but narrow, and calling it a STIG compliance score would be wrong. The VM run is what produces the headline number, and the denominator there is several hundred rules.
+
+This is precisely why the scorer excludes skips from the denominator. Counting them would have reported about 4% here and looked catastrophic instead of narrow. Full output in [findings/stig-scan-container-run.txt](./findings/stig-scan-container-run.txt).
 
 8 tests pass, plus an Ansible syntax check in CI. Regressions get a marker, because hardening is not one directional. Turning on one control can break another, and a diff that only counts wins is lying to you.
 
