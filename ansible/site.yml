@@ -31,7 +31,7 @@
 
     # Baseline scan is invoked explicitly via `make scan-before` rather than here,
     # so you capture the UNHARDENED state before this playbook's hardening roles
-    # run. See the Makefile — ordering is deliberate.
+    # run. See the Makefile, ordering is deliberate.
 
   roles:
     # Applied by `make harden`, tag-gated so `make up` can provision without
