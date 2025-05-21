@@ -31,3 +31,41 @@ jobs:
         run: ansible-galaxy collection install -r ansible/requirements.yml
       - name: syntax check
         run: ansible-playbook ansible/site.yml --syntax-check -i localhost,
+
+  golden-image:
+    name: Golden image build gate
+    runs-on: ubuntu-latest
+    # Bakes the hardening into an image, scans the image, and fails if the
+    # score regressed against image/baseline.json. Free: no cloud, no
+    # registry, the image is built and scanned on the runner and discarded.
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build the golden image
+        run: docker build -t rhel9-hardened-golden:ci -f image/Containerfile image/
+
+      - name: Scan it
+        run: |
+          mkdir -p reports
+          docker run --rm --user root -v "$PWD/reports":/out rhel9-hardened-golden:ci \
+            bash -c "oscap xccdf eval \
+              --profile xccdf_org.ssgproject.content_profile_stig \
+              --results /out/image.xml \
+              /usr/share/xml/scap/ssg/content/ssg-almalinux9-ds.xml >/dev/null 2>&1; true"
+
+      - name: Gate on the score
+        run: python3 scripts/image-gate.py reports/image.xml --baseline image/baseline.json
+
+      - name: Positive control, the gate must be able to fail
+        # Without this the job above is a green badge that would stay green if
+        # the gate stopped working. It has happened here: the gate passed three
+        # times in a row while proving nothing. See findings/golden-image-gate.txt
+        run: bash scripts/image-positive-control.sh
+
+      - name: Upload scan results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: scap-results
+          path: reports/*.xml
+          retention-days: 7

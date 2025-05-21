@@ -158,3 +158,54 @@ are the interesting half of the write-up.
 **Still to confirm on the VM:** whether the STIG profile plus the dev-sec ssh role
 locks SSH down hard enough to drop the Vagrant connection. If it does, the second scan
 can't run and the whole loop stalls.
+
+## Session: golden image, and a score that was entirely fake
+
+Remediating a booted host measures the fix, and leaves every machine
+unhardened until provisioning reaches it. So the controls now bake into an
+image at build time, with the build gated on the resulting SCAP score.
+
+Three failures getting there, and all three were the same mistake wearing
+different clothes: testing the thing I wrote instead of the thing being
+measured.
+
+**The hardening did nothing and scored 88.7%.** Nine sections of real
+controls, and the score was identical to the untouched base image. +0. Of
+1532 rules in the profile, 1048 are notselected and 412 notapplicable; the 71
+that score are file permissions, ownership, packages and GPG. No PAM stack is
+exercised in a container, so pwquality, faillock, login.defs and sudoers
+contribute nothing. The whole 88.7% was AlmaLinux's, not mine.
+
+Only caught it by scanning the unmodified base image to compare against. Had I
+skipped that, the gate would have shipped protecting a number that could not
+move.
+
+Rewrote against scored rules, split the script into SCORED and UNSCORED
+sections. 88.7% to 97.2%, +6 controls. Three of six fixes missed on the first
+attempt, each a wrong assumption rather than a typo, all written up in
+`findings/golden-image-gate.txt`. The best one: `rootfiles_configured` does
+not mean "root's init files exist", it wants a tmpfiles.d entry so
+systemd-tmpfiles restores them from the rootfiles package, which makes a
+hand-edit revert instead of persist.
+
+**Then the positive control passed twice without testing anything.** First
+break weakened pwquality and faillock, which are unscored here, so the gate
+correctly could not see it. Second break disabled one branch of an if/elif and
+the elif re-added the control. Three passes in a row, zero evidence.
+
+Added a verification step that confirms the break landed in the built artifact
+before scanning it. That is the step that should have been there from the
+start, and it is the same lesson as lab 13's chaos test killing an
+already-dead instance.
+
+Working gate: 95.8% against a 96.7% floor, and it names
+`use_pam_wheel_for_su` specifically. Both detectors matter, because adding
+three controls while breaking one nets out fine on a percentage.
+
+Two rules stay failing on purpose. The profile wants `FIPS:STIG` and
+AlmaLinux does not ship `STIG.pmod` (RHEL-only), and the container runtime
+overwrites `/etc/resolv.conf`. Real FIPS also needs `fips=1` at boot, which a
+container cannot provide, so passing that rule would not have meant a
+FIPS-validated image anyway.
+
+---

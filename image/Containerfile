@@ -1,0 +1,67 @@
+# Golden image: hardening baked in at build time, not applied after boot.
+#
+# WHY THIS EXISTS
+#
+# The Vagrant workflow in this repo boots a stock box, scans it, hardens it,
+# and scans again. That measures the remediation, which is the point of the
+# lab. It also means every machine starts unhardened and stays that way for
+# however long provisioning takes, and any host that misses provisioning stays
+# unhardened forever with nothing to say so.
+#
+# A golden image inverts that. The controls are applied once, at build time,
+# and every instance starts from the hardened artifact. Drift starts at zero
+# instead of at "whatever the base image shipped with".
+#
+# WHAT THIS IS NOT
+#
+# A container is not a VM, and this image cannot satisfy the whole STIG
+# profile. Kernel parameters, boot loader settings, partition mount options,
+# auditd rules and anything requiring systemd are either not applicable or not
+# testable here, and the scanner correctly reports them as notapplicable
+# rather than pass.
+#
+# So the score below is a score against the CONTAINER-APPLICABLE SUBSET. It is
+# a real number about a real artifact, and it is not a claim about a hardened
+# VM. The Vagrant path in the Makefile covers the rest, and findings/ records
+# both separately rather than adding them together.
+
+FROM almalinux:9
+
+# scap-security-guide carries the SSG datastream; openscap-scanner runs it.
+# Pinning to the base image's stream rather than :latest so a rebuild is
+# reproducible enough to compare scores across runs.
+RUN dnf -y install --setopt=install_weak_deps=False \
+        openscap-scanner \
+        scap-security-guide \
+        sudo \
+        procps-ng \
+    && dnf clean all \
+    && rm -rf /var/cache/dnf
+
+# --- the hardening itself --------------------------------------------------
+#
+# Applied as a script rather than by Ansible because Ansible in a build layer
+# needs a Python interpreter and a connection plugin for a container that has
+# no SSH, and dragging that in doubles the image for no gain. The Vagrant path
+# still uses the devsec.hardening roles; this covers the subset that is
+# meaningful inside a container and nothing more.
+#
+# Every control here maps to a rule the scanner actually checks, so the score
+# moves for a reason that can be pointed at.
+COPY harden.sh /tmp/harden.sh
+RUN chmod +x /tmp/harden.sh && /tmp/harden.sh && rm -f /tmp/harden.sh
+
+# A non-root default user. The single highest-value container control, and the
+# one most often skipped because it breaks things loudly instead of quietly.
+#
+# The chmod is not redundant with the /etc/skel fix in harden.sh. skel governs
+# what gets COPIED for a new account; this covers anything useradd creates
+# itself. Belt and braces on a rule that scans every user's init files and
+# fails the whole rule for one world-readable dotfile.
+RUN useradd --create-home --shell /bin/bash appuser \
+    && find /home/appuser -maxdepth 1 -type f -name '.*' -exec chmod 0640 {} \;
+USER appuser
+
+LABEL org.opencontainers.image.title="rhel9-hardened-golden" \
+      org.opencontainers.image.description="AlmaLinux 9 with STIG-subset hardening baked in, scored at build time" \
+      org.opencontainers.image.licenses="MIT"

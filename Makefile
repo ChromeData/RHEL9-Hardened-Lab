@@ -1,4 +1,4 @@
-.PHONY: help up scan-before harden scan-after delta destroy
+.PHONY: help up scan-before harden scan-after delta destroy image image-scan image-gate image-baseline image-control
 .DEFAULT_GOAL := help
 
 SSG    := /usr/share/xml/scap/ssg/content/ssg-almalinux9-ds.xml
@@ -37,3 +37,31 @@ delta: ## Compute the pass-rate improvement
 
 destroy: ## Tear down the VM
 	vagrant destroy -f
+
+# --- golden image path -------------------------------------------------------
+#
+# The VM path above measures remediation on a running host. This path bakes the
+# controls into an image and gates the build on the score, so a control that
+# stops working fails CI instead of shipping.
+#
+# Scoped to the container-applicable subset, 71 of 1532 rules. See
+# findings/golden-image-gate.txt for why that number is what it is.
+
+IMAGE   := rhel9-hardened-golden
+OSCAP   := oscap xccdf eval --profile $(PROFILE)
+
+image: ## Build the hardened golden image
+	docker build -t $(IMAGE):latest -f image/Containerfile image/
+
+image-scan: image ## Scan the built image -> reports/image.xml
+	@mkdir -p reports
+	docker run --rm --user root -v "$(CURDIR)/reports":/out $(IMAGE):latest 		bash -c "$(OSCAP) --results /out/image.xml $(SSG) >/dev/null 2>&1; true"
+
+image-gate: image-scan ## Fail the build if the image regressed against the baseline
+	python3 scripts/image-gate.py reports/image.xml --baseline image/baseline.json
+
+image-baseline: image-scan ## Rewrite the committed baseline. Deliberate, and reviewable in a diff.
+	python3 scripts/image-gate.py reports/image.xml --baseline image/baseline.json --update-baseline
+
+image-control: ## Positive control: break a scored rule, prove the gate catches it
+	bash scripts/image-positive-control.sh

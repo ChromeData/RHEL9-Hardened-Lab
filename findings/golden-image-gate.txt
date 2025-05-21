@@ -1,0 +1,215 @@
+GOLDEN IMAGE BUILD GATE — what it took to make the number mean something
+=========================================================================
+
+The Vagrant path in this repo boots a stock box, scans it, hardens it, scans
+again. That measures remediation, which was the point.
+
+It also means every host starts unhardened, and any host that misses
+provisioning stays unhardened with nothing to say so. A golden image inverts
+that: apply the controls once at build time, and every instance starts from
+the hardened artifact.
+
+Building one was easy. Making its score mean anything took three failures,
+and all three were mine.
+
+
+-------------------------------------------------------------------------------
+FAILURE 1  --  the hardening did nothing, and scored 88.7%
+-------------------------------------------------------------------------------
+
+First harden.sh had nine sections: password quality, faillock, password aging,
+sudo policy, cron permissions, credential file modes, setuid trimming, system
+account shells. It read like a hardening script. The image built clean.
+
+    $ oscap xccdf eval --profile stig ...
+    69 / 71 ... no. 63 / 71 passed (88.7%)
+
+88.7% looked respectable, so I nearly wrote it into the README and moved on.
+
+The check that saved it was scanning the UNHARDENED base image for comparison:
+
+    Baseline :  63 / 71 passed (88.7%)     <- stock almalinux:9, untouched
+    Hardened :  63 / 71 passed (88.7%)     <- after all nine sections
+    Delta    : +0 controls (+0.0 pp)
+
+    Fixed    : 0 controls
+
+Zero. Every control in that script was real and not one of them was EVALUATED.
+
+Of 1532 rules in the STIG profile:
+
+    notselected     1048
+    notapplicable    412
+    pass               63
+    fail                8
+    notchecked          1
+
+The 71 scored rules are file permissions, ownership, package presence and GPG
+checking. pam_pwquality, faillock, login.defs and sudoers are not among them,
+because a container has no PAM stack being exercised and no systemd to
+evaluate against. The entire 88.7% was what AlmaLinux already shipped.
+
+A build gate wrapped around that would have been decoration protecting
+decoration. It would also have passed forever, because nothing it watched was
+capable of changing.
+
+Rewrote harden.sh against the rules the scanner actually scores, and split the
+file into SCORED and UNSCORED sections. The unscored controls stayed, because
+this image is a base for hosts where they do apply, but they are now labelled
+so nobody mistakes them for the number again.
+
+    Baseline :  63 / 71 passed (88.7%)
+    Hardened :  69 / 71 passed (97.2%)
+    Delta    : +6 controls (+8.5 pp)
+
+
+-------------------------------------------------------------------------------
+Three of six fixes missed on the first attempt
+-------------------------------------------------------------------------------
+
+Worth recording, because each was a wrong assumption rather than a typo.
+
+accounts_umask_etc_bashrc
+    Appended `umask 077` and left line 69 of /etc/bashrc intact:
+        [ `umask` -eq 0 ] && umask 022
+    That line does not start with "umask", so the grep missed it and the
+    append ran. /etc/profile passed and /etc/bashrc failed, from the same
+    block of code. Fix: replace the value in place, do not add a later one.
+
+rootfiles_configured
+    Assumed it meant "root's init files exist". It does not. It wants a
+    tmpfiles.d entry so systemd-tmpfiles RESTORES those files to mode 600 from
+    the rootfiles package — a hand-edit gets reverted rather than persisting,
+    which is a stronger control than a one-time chmod.
+
+    The rootfiles package is not in the base image. Writing the conf without
+    it would point at files that do not exist: the rule would pass and the
+    mechanism would do nothing. Installed the package first.
+
+file_permission_user_init_files_root
+    Fixed /root and forgot /etc/skel, which ships 0644. useradd then copied
+    world-readable dotfiles into the appuser home created later in the
+    Containerfile, and the rule fails for ALL users if any one of them has a
+    loose init file.
+
+configure_crypto_policy
+    Set DEFAULT. The back-end symlinks were all correct and the rule still
+    failed, because it compares against the profile's expected value —
+    var_system_crypto_policy = FIPS:STIG — not against "is a policy set".
+
+
+-------------------------------------------------------------------------------
+FAILURE 2  --  the positive control passed, and proved nothing
+-------------------------------------------------------------------------------
+
+With the gate green at 97.2%, the next step was to break the image on purpose
+and watch the gate go red.
+
+First break: weakened the password policy. minlen 15 -> 6, all the credit
+classes to 0, faillock deny 3 -> 20.
+
+    scanned  : 63/71 passed (88.7%)
+    PASS: no regression against the committed baseline.
+
+Passed. Which was correct, and useless — pwquality and faillock are in the
+UNSCORED set, so weakening them cannot move a number built from scored rules.
+The break was outside what the gate can see.
+
+This is the same mistake as failure 1 wearing a different hat: I tested the
+thing I had written rather than the thing being measured.
+
+
+-------------------------------------------------------------------------------
+FAILURE 3  --  the second break did not break anything
+-------------------------------------------------------------------------------
+
+Second attempt targeted a scored rule, use_pam_wheel_for_su, by disabling the
+branch that enables it:
+
+    - if grep -qE '^#\s*auth\s+required\s+pam_wheel\.so' /etc/pam.d/su; then
+    + if false; then
+
+    scanned  : 69/71 passed (97.2%)
+    PASS: no regression against the committed baseline.
+
+Passed again. The section had an `elif` fallback that ADDS the line when it is
+absent, so disabling the first branch just routed through the second and
+pam_wheel got configured anyway.
+
+Three passing results in a row, none of which meant the gate worked.
+
+So the next run verified the break landed in the artifact BEFORE scanning it,
+which is the step that should have been there from the start:
+
+    $ docker run --rm rhel9-hardened-golden:regressed grep pam_wheel /etc/pam.d/su
+    #auth      sufficient  pam_wheel.so trust use_uid
+    #auth      required    pam_wheel.so use_uid          <- commented, break landed
+
+    $ docker run --rm rhel9-hardened-golden:v3 grep pam_wheel /etc/pam.d/su
+    #auth      sufficient  pam_wheel.so trust use_uid
+    auth       required    pam_wheel.so use_uid          <- active, control intact
+
+
+-------------------------------------------------------------------------------
+THE GATE, WORKING
+-------------------------------------------------------------------------------
+
+    $ python scripts/image-gate.py reports/regressed.xml
+
+    scanned  : 68/71 passed (95.8%)
+    floor    : 96.7%  (baseline 97.2% minus 0.5 pp tolerance)
+
+    FAIL: pass rate 95.8% is below the floor of 96.7%
+
+    FAIL: 1 control(s) that passed in the baseline now fail:
+      ! xccdf_org.ssgproject.content_rule_use_pam_wheel_for_su
+
+    The image built. It is not allowed to ship.
+    exit=1
+
+Both detectors fired: the aggregate floor and the named control. The second
+matters independently, because "hardened three new things and quietly broke
+SSH" nets out fine on a percentage.
+
+
+-------------------------------------------------------------------------------
+STILL FAILING, AND STAYING THAT WAY
+-------------------------------------------------------------------------------
+
+2 of 71 rules fail in the built image. Both are container limits, not misses.
+
+configure_crypto_policy
+    The profile wants FIPS:STIG. AlmaLinux's crypto-policies package does not
+    ship STIG.pmod — it is RHEL-only:
+
+        Unknown policy `STIG`: file `STIG.pmod` not found
+
+    The fallback sets FIPS, which the rule does not accept. Real FIPS mode
+    also needs fips=1 as a kernel boot parameter, which a container has no
+    way to provide, so passing this rule here would not have meant a
+    FIPS-validated image anyway. Those are two different claims and only one
+    of them was ever available.
+
+network_configure_name_resolution
+    Wants two or more nameservers in /etc/resolv.conf. The container runtime
+    overwrites that file at start, so anything baked in is discarded. Fails
+    in the image, would pass on a host.
+
+Left failing rather than papered over. The floor is set at what the image
+genuinely achieves.
+
+
+-------------------------------------------------------------------------------
+SCOPE
+-------------------------------------------------------------------------------
+
+97.2% is a score against the CONTAINER-APPLICABLE SUBSET: 71 of 1532 rules.
+It is a real number about a real artifact and it is not a claim about a
+hardened VM. The Vagrant path covers what a container cannot reach — kernel
+parameters, boot loader, mount options, auditd, firewalld — and the two
+numbers are recorded separately in findings/ rather than added together.
+
+The reusable lesson is not about SCAP. Three green results in a row, and the
+only reason any of them got questioned was a habit of scanning the unmodified
+baseline for comparison and checking that a deliberate break actually landed
+in the artifact before trusting what the scan said about it.

@@ -1,0 +1,8 @@
+# Shell scripts and the Containerfile are executed inside a Linux container.
+# Checked out with CRLF on Windows, the shebang line ends in \r and the build
+# dies with "exit code: 126", which reads as a permissions problem and is not
+# one. Cost me a rebuild; pinning LF so it cannot happen on a fresh clone.
+*.sh            text eol=lf
+Containerfile   text eol=lf
+Makefile        text eol=lf
+*.py            text eol=lf
