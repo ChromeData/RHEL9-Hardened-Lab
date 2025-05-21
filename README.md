@@ -82,6 +82,18 @@ Both detectors fire: the aggregate floor, and the specific named control. The se
 
 Two rules still fail and stay failing: the STIG profile wants the `FIPS:STIG` crypto policy and AlmaLinux doesn't ship `STIG.pmod`, and the container runtime overwrites `/etc/resolv.conf` at start. Both are container limits, documented rather than papered over. Full account in [findings/golden-image-gate.txt](./findings/golden-image-gate.txt).
 
+## Decisions
+
+| Chose | Over | Because |
+|---|---|---|
+| Bake controls into a golden image, gated at build | remediating each running host | Remediating a live host measures the fix but leaves every machine starting unhardened, and any machine that misses provisioning stays that way silently. Gating the build means a broken control fails CI instead of shipping. |
+| Exclude `notapplicable` from the denominator | counting skips as failures | 412 of 1532 rules don't apply in a container — no kernel, bootloader or auditd of its own. Counting them reports ~4% and reads as catastrophic when the real result is narrow. Excluding them makes the number honest about scope instead of dramatic. |
+| Scan the untouched base image as a control | trusting the delta | The first hardening script scored 88.7% and had changed nothing — the whole score was what AlmaLinux already shipped. Only a baseline scan of the *unmodified* image exposed that. A gate around that number would have passed forever and protected nothing. |
+| Split the script into SCORED / UNSCORED | one undifferentiated list of controls | Real controls that the scanner can't evaluate look identical to controls that work. Separating them stops unscored work from silently claiming credit. |
+| Verify the break landed in the artifact before trusting the scan | trusting a positive control that goes red | The positive control passed twice while proving nothing — once because the weakened rule was unscored, once because an `elif` branch re-added the control. Three green runs, none meaningful. |
+| Two detectors: aggregate floor **and** named-control regression | a single percentage floor | "Hardened three new things and quietly broke SSH" nets out fine on a percentage. The named-control check catches what the aggregate hides. |
+| Document the two permanently failing rules | tuning the profile until it's green | `FIPS:STIG` needs a crypto policy AlmaLinux doesn't ship, and the container runtime rewrites `/etc/resolv.conf`. Both are container limits. Suppressing them would make the score prettier and the lab less true. |
+
 ## What I did not build
 
 The hardening roles are dev-sec's and the SCAP content is ComplianceAsCode's. The measurable workflow, the scorer, the build gate, and the tests are mine.
