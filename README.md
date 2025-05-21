@@ -1,5 +1,8 @@
 # Lab 03: Self Building Hardened RHEL 9 Lab
 
+<p align="center"><img src="assets/stig-delta.svg" alt="Real OpenSCAP STIG scan, before and after remediation" width="720"></p>
+
+
 [![tests](https://github.com/ChromeData/RHEL9-Hardened-Lab/actions/workflows/tests.yml/badge.svg)](https://github.com/ChromeData/RHEL9-Hardened-Lab/actions/workflows/tests.yml)
 
 **A VM that hardens itself and proves it worked. Boot a RHEL 9 box, scan it against the DISA STIG, apply fixes as code, scan again. The result is a before and after number, not a claim.**
