@@ -1,88 +1,57 @@
-# Lab 03 — Self-Building Hardened RHEL 9 Lab
+# Lab 03: Self Building Hardened RHEL 9 Lab
 
 [![tests](https://github.com/ChromeData/RHEL9-Hardened-Lab/actions/workflows/tests.yml/badge.svg)](https://github.com/ChromeData/RHEL9-Hardened-Lab/actions/workflows/tests.yml)
 
-**A VM that hardens itself and proves it worked. Boot a RHEL 9 box, scan it
-against the DISA STIG, apply fixes as code, scan again — the result is a
-before/after number, not a claim.**
+**A VM that hardens itself and proves it worked. Boot a RHEL 9 box, scan it against the DISA STIG, apply fixes as code, scan again. The result is a before and after number, not a claim.**
 
 | | |
 |---|---|
-| **Domains** | Linux (RHEL 9 · RHCSA/RHCE-adjacent) · security |
-| **Built on** | [ComplianceAsCode/content](https://github.com/ComplianceAsCode/content) (BSD-3) · [dev-sec/ansible-collection-hardening](https://github.com/dev-sec/ansible-collection-hardening) (Apache-2.0) · OpenSCAP |
-| **Cost** | $0 (local VM) · **Runtime** ~3 hours |
-| **Status** | 🟡 Built, validated, not yet run |
+| **Domains** | Linux (RHEL 9, RHCSA/RHCE adjacent), security |
+| **Built on** | [ComplianceAsCode/content](https://github.com/ComplianceAsCode/content), [dev-sec/ansible-collection-hardening](https://github.com/dev-sec/ansible-collection-hardening), OpenSCAP |
+| **Cost** | $0 (local VM). **Runtime** ~3 hours |
+| **Status** | Built, validated, not yet run |
 
----
+## Situation
 
-## The point
+Almost every RHCSA repo on GitHub is a folder of notes. Notes do not prove you can harden a box.
 
-Almost every RHCSA repo on GitHub is a folder of notes. Notes don't prove you can
-harden a box. This does the loop that proves it:
+## Task
 
-1. **Stand up** an unhardened RHEL 9 host (Vagrant).
-2. **Scan** it against the STIG with OpenSCAP → a failing baseline score.
-3. **Harden** with Ansible (dev-sec roles).
-4. **Scan again** → the improved score.
-5. **Diff** the two → the number that is the whole point.
+Run the full loop that does prove it, and produce evidence at the end.
 
-The artifact is the delta. "I hardened Linux" is a sentence anyone can write.
-"I moved it from 41% to 89% STIG-compliant and here are the four controls that
-regressed and why" is evidence.
+## Action
 
-## The measurement is tested
+Five steps: stand up an unhardened RHEL 9 host with Vagrant, scan it against the STIG with OpenSCAP for a failing baseline, harden it with Ansible, scan again, and diff the two.
 
-[`scripts/scap-delta.py`](./scripts/scap-delta.py) parses two OpenSCAP result
-files and computes the delta. That's where the headline number comes from, so it
-has **8 offline unit tests** on synthetic XCCDF — no VM needed:
+The diff is the point. "I hardened Linux" is a sentence anyone can write. "I moved it from 41% to 89% STIG compliant and here are the four controls that broke and why" is evidence.
 
-- skips (`notapplicable`) don't drag the percentage down
-- a remediated rule reports as `fixed`, not `pass` — counted correctly
-- both the 1.1 and 1.2 XCCDF namespaces parse
-- **regressions are surfaced, not buried** — hardening that breaks a
-  previously-passing control is the thing you most need to see
+The scorer that produces the number ([scripts/scap-delta.py](./scripts/scap-delta.py)) has 8 offline tests on fake SCAP files, so the headline number is trustworthy before I ever boot a VM. It handles skips correctly, counts a remediated rule as a pass, reads both SCAP formats, and surfaces regressions.
 
-```bash
-python -m pytest tests/ -v
-```
+## Result
 
-CI runs the tests plus an Ansible syntax check on every push.
+8 tests pass, plus an Ansible syntax check in CI. Regressions get a marker, because hardening is not one directional. Turning on one control can break another, and a diff that only counts wins is lying to you.
 
-## Why regressions matter
+## What I did not build
 
-Hardening isn't monotonic. Turning on a STIG control can break a different one —
-tighten SSH ciphers and something that expected the old set starts failing. A
-delta that only counts wins is lying to you. `scap-delta.py` prints every
-`pass → fail` flip with a `!`, because those are the ones you write about.
+The hardening roles are dev-sec's and the SCAP content is ComplianceAsCode's. The measurable workflow, the scorer, and the tests are mine.
 
-## What I didn't build
-
-The hardening roles are dev-sec's; the SCAP content is ComplianceAsCode's. The
-measurable before/after workflow, the delta scorer, the tests, and the
-orchestration are mine.
-
----
-
-## Running it
+## Run it
 
 ```bash
 make up            # provision the RHEL 9 VM
-make scan-before   # baseline scan (unhardened) -> reports/before.xml
-make harden        # apply the dev-sec roles
-make scan-after    # second scan -> reports/after.xml
+make scan-before   # baseline scan
+make harden        # apply the roles
+make scan-after    # second scan
 make delta         # the number
 make destroy
 ```
 
-Needs Vagrant + a libvirt/VirtualBox provider, and Python 3 on the host for the
-delta.
+Needs Vagrant with a libvirt or VirtualBox provider, and Python 3 on the host.
 
 ## Findings
 
-`reports/` and the printed delta are the output. [LAB-NOTES.md](./LAB-NOTES.md) is
-the log.
+`reports/` and the printed delta are the output. [LAB-NOTES.md](./LAB-NOTES.md) is the log.
 
 ## License
 
-Lab code: MIT ([LICENSE](./LICENSE)). Upstream content keeps BSD-3 / Apache-2.0,
-credited above.
+Lab code: MIT ([LICENSE](./LICENSE)). Upstream content keeps its licenses, credited above.
