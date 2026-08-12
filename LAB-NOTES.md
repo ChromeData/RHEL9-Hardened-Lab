@@ -1,63 +1,68 @@
-# Lab Notes — RHEL 9 Hardened Lab
+# Lab Notes — 03 RHEL 9 Hardened Lab
 
-> Running log, newest first.
-
----
-
-## Known traps (pre-seeded — confirm or replace)
-
-### SSH hardening can lock you out of Vagrant
-
-`ssh_hardening` tightens `sshd_config` — ciphers, MACs, `AllowUsers`, and possibly
-`PermitRootLogin`. Vagrant's SSH can break mid-play. If `vagrant ssh` stops working
-after `make harden`, that is the lab working as intended. Recover via the provider
-console (`virtualbox` GUI or `virsh console`), and record exactly which directive
-did it. This is the single most instructive failure in the lab.
-
-### The datastream filename is distro-specific
-
-`ssg-almalinux9-ds.xml` for Alma, `ssg-rhel9-ds.xml` for subscribed RHEL,
-`ssg-rl9-ds.xml` for Rocky. Wrong filename → `oscap` exits with a file-not-found
-that does not obviously say "wrong distro." List what is actually installed:
-`ls /usr/share/xml/scap/ssg/content/`.
-
-### oscap exits non-zero when controls fail
-
-`oscap xccdf eval` returns exit code 2 when any rule fails — which is normal, not
-an error. The Makefile uses `|| true` so the scan still writes its report. Do not
-add error handling that treats a failing baseline as a broken run.
-
-### Some STIG findings are false positives on a minimal box
-
-A bare Vagrant image legitimately fails controls about audit daemons, GUI screen
-locks, or FIPS mode that do not apply. Note these rather than "fixing" them — being
-able to distinguish an inapplicable control from a real gap is a senior skill.
+Running log. Errors, dead ends, fixes, surprises. Dated, newest at the bottom.
 
 ---
 
-## YYYY-MM-DD — <first real entry>
-
-**Goal:**
-
-**What happened:**
+## Format
 
 ```
-```
+### YYYY-MM-DD — what I was trying to do
 
-**Why:**
-
+**Expected:**
+**Got:**
+**Cause:**
 **Fix:**
+```
 
-**Time lost:**
+---
+
+## Design decisions
+
+### The delta counts scored controls only
+
+`notapplicable` / `notchecked` rules are excluded from the denominator. Including
+them makes the percentage meaningless — a box with 300 N/A rules would show a
+fake-high score. Pinned by a test.
+
+### Regressions are first-class output
+
+Hardening is not monotonic. `scap-delta.py` prints every `pass -> fail` flip.
+A delta that only reports wins hides the controls the hardening broke, which are
+exactly the ones worth understanding.
+
+### `fixed` counts as pass
+
+OpenSCAP reports a rule it remediated in-run as `fixed`. Treating that as
+anything but a pass understates the result.
+
+---
+
+## Known traps (confirm on first run)
+
+- **Datastream path is distro-specific.** `site.yml` points at
+  `ssg-almalinux9-ds.xml`. On genuine RHEL 9 it's `ssg-rhel9-ds.xml`; on Rocky,
+  `ssg-rocky9-ds.xml`. Wrong path = zero rules scanned, which looks like a clean
+  pass. List profiles first:
+  `oscap info /usr/share/xml/scap/ssg/content/ssg-*-ds.xml`
+- **The STIG profile is aggressive.** It can lock SSH down enough to drop your
+  Vagrant connection. Confirm the ssh_hardening role keeps the vagrant user able
+  to reconnect, or the second scan can't run.
+- **First scan must run BEFORE the roles.** The Makefile orders `scan-before`
+  ahead of `harden` for a reason — run them out of order and the baseline is
+  already hardened, so the delta is near zero and the lab looks pointless.
 
 ---
 
 ## Open questions
 
-- [ ] Which controls needed manual remediation beyond the dev-sec roles?
-- [ ] Did any hardening break sudo or SSH? How was it recovered?
-- [ ] How does the Alma 9 score compare to genuine RHEL 9, if you ran both?
+- [ ] Actual baseline and hardened percentages on RHEL 9? (The headline numbers.)
+- [ ] Which controls regress under the dev-sec roles + STIG profile together?
+- [ ] Does the SSH hardening break the Vagrant connection on the default box?
+- [ ] How long does a full STIG scan take on a t3.micro-equivalent VM?
 
-## What I would do differently
+---
 
-_End._
+## Log
+
+_(first entry goes here on the first real run)_

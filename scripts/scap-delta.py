@@ -19,9 +19,10 @@ FAIL = {"fail", "error"}
 SKIP = {"notapplicable", "notchecked", "notselected", "informational", "unknown"}
 
 
-def parse(path):
-    tree = ET.parse(path)
-    root = tree.getroot()
+def parse_root(root):
+    """Extract {rule_id: result} from an XCCDF root element. Split out from
+    parse() so tests can feed synthetic XML without writing temp files, and so
+    the 1.1/1.2 namespace fallback is exercised directly."""
     ns = NS if root.findall(".//x:rule-result", NS) else NS_ALT
     results = {}
     for rr in root.findall(".//x:rule-result", ns):
@@ -29,6 +30,25 @@ def parse(path):
         res = rr.find("x:result", ns)
         results[rid] = res.text if res is not None else "unknown"
     return results
+
+
+def parse(path):
+    return parse_root(ET.parse(path).getroot())
+
+
+def compute_delta(before, after):
+    """The scored comparison, as data rather than printed text. This is the
+    function the headline number comes from, so it is the function under test."""
+    bp, bt, bpct = scored(summarize(before))
+    ap, at, apct = scored(summarize(after))
+    fixed = [r for r in before if before[r] in FAIL and after.get(r) in PASS]
+    regressed = [r for r in before if before[r] in PASS and after.get(r) in FAIL]
+    return {
+        "baseline_pass": bp, "baseline_total": bt, "baseline_pct": bpct,
+        "hardened_pass": ap, "hardened_total": at, "hardened_pct": apct,
+        "delta_controls": ap - bp, "delta_pp": apct - bpct,
+        "fixed": fixed, "regressed": regressed,
+    }
 
 
 def summarize(results):
@@ -53,20 +73,15 @@ def main():
         sys.exit("usage: scap-delta.py before.xml after.xml")
 
     before, after = parse(sys.argv[1]), parse(sys.argv[2])
-    bc, ac = summarize(before), summarize(after)
-    bp, bt, bpct = scored(bc)
-    ap, at, apct = scored(ac)
+    d = compute_delta(before, after)
 
-    print(f"Baseline : {bp:3} / {bt} passed ({bpct:.1f}%)")
-    print(f"Hardened : {ap:3} / {at} passed ({apct:.1f}%)")
-    print(f"Delta    : {ap - bp:+d} controls ({apct - bpct:+.1f} pp)")
+    print(f"Baseline : {d['baseline_pass']:3} / {d['baseline_total']} passed ({d['baseline_pct']:.1f}%)")
+    print(f"Hardened : {d['hardened_pass']:3} / {d['hardened_total']} passed ({d['hardened_pct']:.1f}%)")
+    print(f"Delta    : {d['delta_controls']:+d} controls ({d['delta_pp']:+.1f} pp)")
 
-    # Controls that flipped fail -> pass, and any that regressed pass -> fail.
-    fixed = [r for r in before if before[r] in FAIL and after.get(r) in PASS]
-    regressed = [r for r in before if before[r] in PASS and after.get(r) in FAIL]
-    print(f"\nFixed    : {len(fixed)} controls")
-    print(f"Regressed: {len(regressed)} controls  <- investigate every one of these")
-    for r in regressed:
+    print(f"\nFixed    : {len(d['fixed'])} controls")
+    print(f"Regressed: {len(d['regressed'])} controls  <- investigate every one of these")
+    for r in d["regressed"]:
         print(f"  ! {r}")
 
 
