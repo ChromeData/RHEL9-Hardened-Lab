@@ -1,4 +1,4 @@
-# Lab Notes — 03 RHEL 9 Hardened Lab
+# Lab Notes, 03 RHEL 9 Hardened Lab
 
 Running log. Errors, dead ends, fixes, surprises. Dated, newest at the bottom.
 
@@ -7,7 +7,7 @@ Running log. Errors, dead ends, fixes, surprises. Dated, newest at the bottom.
 ## Format
 
 ```
-### YYYY-MM-DD — what I was trying to do
+### YYYY-MM-DD, what I was trying to do
 
 **Expected:**
 **Got:**
@@ -22,7 +22,7 @@ Running log. Errors, dead ends, fixes, surprises. Dated, newest at the bottom.
 ### The delta counts scored controls only
 
 `notapplicable` / `notchecked` rules are excluded from the denominator. Including
-them makes the percentage meaningless — a box with 300 N/A rules would show a
+them makes the percentage meaningless, a box with 300 N/A rules would show a
 fake-high score. Pinned by a test.
 
 ### Regressions are first-class output
@@ -49,7 +49,7 @@ anything but a pass understates the result.
   Vagrant connection. Confirm the ssh_hardening role keeps the vagrant user able
   to reconnect, or the second scan can't run.
 - **First scan must run BEFORE the roles.** The Makefile orders `scan-before`
-  ahead of `harden` for a reason — run them out of order and the baseline is
+  ahead of `harden` for a reason, run them out of order and the baseline is
   already hardened, so the delta is near zero and the lab looks pointless.
 
 ---
@@ -65,7 +65,7 @@ anything but a pass understates the result.
 
 ## Log
 
-### 2026-08-12 — testing the scorer before trusting the number
+### 2026-08-12, testing the scorer before trusting the number
 
 The delta script is the whole deliverable: the before/after percentage is what I'd
 quote in an interview. So I wrote tests against synthetic XCCDF before running a
@@ -76,7 +76,7 @@ if they land in the denominator. Only pass + fail are scored.
 
 **`fixed` is a pass.** OpenSCAP reports a rule it remediated in-run as `fixed`, not
 `pass`. Treating that literally would undercount every remediation the scan itself
-performed — which is most of them.
+performed, which is most of them.
 
 Also split `compute_delta()` out as a pure function so the tests exercise the exact
 aggregation the report prints, not a parallel reimplementation of it.
@@ -85,7 +85,7 @@ Final run: **8 passed** (`findings/test-run.txt`).
 
 ---
 
-### 2026-08-12 — decided regressions get their own output line
+### 2026-08-12, decided regressions get their own output line
 
 Hardening isn't monotonic. Tightening SSH ciphers can break a control that expected
 the old set. A delta that only counts wins reads great and hides the damage.

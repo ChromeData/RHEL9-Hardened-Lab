@@ -3,7 +3,7 @@
 
 Parses the <rule-result> entries from before.xml and after.xml and reports how
 many controls moved from fail to pass. The number this prints is the lab's
-headline result — put it in the README.
+headline result, put it in the README.
 """
 
 import sys
