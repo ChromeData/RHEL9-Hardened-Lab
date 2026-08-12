@@ -1,0 +1,8 @@
+---
+# Upstream content. Pinned so the lab is reproducible and so you can cite exact
+# versions in your findings.
+collections:
+  - name: devsec.hardening
+    version: ">=10.0.0"   # dev-sec/ansible-collection-hardening
+
+roles: []
